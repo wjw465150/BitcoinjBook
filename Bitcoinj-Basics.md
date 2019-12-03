@@ -1,4 +1,4 @@
-# Basics
+# Basics(基础知识)
 
 # 限制和缺少的功能 {#Limitations_and_missing_features}
 

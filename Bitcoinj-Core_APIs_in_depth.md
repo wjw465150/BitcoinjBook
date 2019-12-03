@@ -1,4 +1,4 @@
-# Working with transactions
+# Working with transactions(处理交易)
 
 ## Introduction {#Introduction}
 Transactions are the fundamental atoms of the Bitcoin protocol. They encapsulate a claim upon some value, and the conditions needed for that value to itself later be claimed.
