@@ -1,39 +1,39 @@
 # Working with transactions(处理交易)
 
-## Introduction {#Introduction}
-Transactions are the fundamental atoms of the Bitcoin protocol. They encapsulate a claim upon some value, and the conditions needed for that value to itself later be claimed.
+## 介绍 {#Introduction1}
+交易是比特币协议的基本要素。 他们封装了对某个价值的主张，并随后要求对该价值本身要求的条件。
 
-This article will discuss:
+本文将讨论：
 
-- What a transaction is
-- The Transaction class and what it gives you
-- Transaction confidences
-- Different ways in which transactions can be used
+- 什么是交易
+- 交易类及其给您的好处
+- 交易可信度
+- 可以使用不同的交易方式
 
-## What is a transaction? {#What_is_a_transaction_}
-Transactions are, at heart, a collection of *inputs* and *outputs*. They also have a lock time, which is not used in the current Bitcoin network, and a few bits of metadata only represented in bitcoinj like when the transaction was last seen and a confidence measurement. All this is represented using the `Transaction` class.
+## 什么是交易？ {#What_is_a_transaction_}
+交易本质上是*输入*和*输出*的集合。 它们还具有锁定时间（当前的比特币网络中未使用该锁定时间），以及仅以比特币形式表示的少量元数据（如上次交易时的时间）和置信度度量。 所有这些都使用`Transaction`类表示。
 
-An output is a data structure specifying a *value* and a *script*, conventionally called the *scriptPubKey*. An output allocates some of the value gathered by the transactions inputs to a particular program. Anyone who can satisfy the program (make it return true) is allowed to claim that outputs value in their own transaction. Output scripts most often check signatures against public keys, but they can do many other things.
+输出是指定 *value* 和 *script* 的数据结构，通常称为 *scriptPubKey* 。 输出将由交易输入收集的某些值分配给特定程序。 任何可以满足该程序（使其返回true）的人都可以要求在自己的交易中输出值。 输出脚本通常会根据公共密钥检查签名，但是它们可以做很多其他事情。
 
-An input is a data structure that contains a *script*, which in practice is just a list of byte arrays, and an *outpoint*, which is a reference to an output of another transaction. Because Bitcoin identifies transactions by their hash, an outpoint is therefore a (hash, index) pair in which the index simply identifies which output in the given transaction is intended. We say the input is *connected* to an output. Input scripts, conventionally called *scriptSigs* can theoretically contain any script opcodes, but because the programs are run with no input there is little point in doing that, therefore, real input scripts only ever push constants like signatures and keys onto the stack.
+输入是一个数据结构，其中包含一个 *script*（实际上只是一个字节数组的列表）和一个 *outpoint* ，这是对另一个交易的输出的引用。 由于比特币通过其哈希来标识交易，因此出口是（哈希，索引）对，其中索引仅标识给定交易中的预期输出。我们说输入是 *connected* 到输出的。 输入脚本通常称为 *scriptSigs* ，理论上可以包含任何脚本操作码，但是由于程序是在没有输入的情况下运行的，因此这样做毫无意义，因此，实际的输入脚本只能将诸如签名和键之类的常量推入堆栈。
 
-Inputs also contain *sequence numbers*. Sequence numbers are not currently used on the Bitcoin network and are not exposed by bitcoinj. They exist to support [contracts](https://en.bitcoin.it/wiki/Contracts).
+输入还包含 *序列号* 。 序列号当前未在比特币网络上使用，并且没有被bitcoinj公开。 它们的存在是为了支持[contracts(合同)](https://en.bitcoin.it/wiki/Contracts)。
 
-The mismatch, if any, between the value gathered by a transactions inputs and spent by its outputs is called the *fee*. Obviously, a transaction that has more value in its outputs than gathered by its inputs is considered invalid, but the reverse is not true. Value not re-allocated can be legitimately claimed by whoever successfully mines a block containing that transaction.
+交易输入收集的值与其输出花费的值之间的不匹配（如有）称为 *fee(费用)* 。 显然，在输出中具有比其输入所收集的价值更高的交易被视为无效，但反之则不成立。 谁成功开采了包含该交易的区块，谁都可以合法地主张未重新分配的价值。
 
-Note that an input does not contain a value field. To find the value of an input, you must check the value of its connected output. That implies that given a standalone transaction, you cannot know what its fee is, unless you also have all of the transactions its inputs connect to.
+请注意，输入不包含值字段。 要查找输入的值，必须检查其连接的输出的值。 这意味着，对于一个独立的交易，除非您还拥有其输入连接的所有交易，否则您将不知道其费用是多少。
 
-Transactions can be serialized and either broadcast across the P2P network, in which case miners may start trying to include it in a block, or passed around outside the network using other protocols.
+交易可以被序列化，或者通过P2P网络广播，在这种情况下，矿工可以开始尝试将其包含在一个块中，或者使用其他协议在网络外部传递。
 
-## The Transaction class {#The_Transaction_class}
-The `Transaction` class lets you deserialize, serialize, build and inspect transactions. It also helps you track interesting metadata about a transaction such as which blocks (if any) it has been included in, and how much confidence you can have that the transaction won’t be reversed/double spent.
+## 交易类 {#The_Transaction_class}
+`Transaction`类允许反序列化、序列化、构建和检查交易。它还可以帮助您跟踪关于交易的有趣的元数据，比如已经包含了哪些块(如果有的话)，以及您对交易不会被逆转/重复使用的信心有多大。
 
-Inputs are represented with the `TransactionInput` class, and outputs are of course handled by the `TransactionOutput` class. Inputs can be unsigned, in which case the transaction won’t be considered valid by the network, but the intermediate state can be useful to work with sometimes.
+输入由`TransactionInput`类表示，输出当然由`TransactionOutput`类处理。 输入可以是无符号的，在这种情况下，网络不会认为交易有效，但是中间状态有时会很有用。
 
-**Common tasks**:
+**常见的任务**:
 
-1. Access inputs and outputs using getInputs(), getOutputs(), addInput() and addOutput(). Note that addInput() has two forms, one which takes a `TransactionInput` - logical enough. The other takes a `TransactionOutput`, and will create an unsigned input for you that connects to that output.
-2. Sign the transactions inputs with `signInputs()`. Currently you must always pass `SigHash.ALL` as the first parameter. Other types of `SigHash` flags will become supported in future. They are used for contracts. This method also requires a wallet that contains the keys used by the inputs connected outputs. If you don’t have the private keys, then obviously you cannot claim the value.
+1. 使用 `getInputs()` , `getOutputs()` , `addInput()` 和 `addOutput()`访问输入和输出。注意，`addInput()` 有两种形式，其中一种采用 `TransactionInput` —这非常合乎逻辑。另一个是 `TransactionOutput` ，它将为您创建一个连接到输出的无符号输入。
+2. 用`signInputs()`签署交易输入。 当前，您必须始终将`SigHash.ALL`作为第一个参数传递。 将来会支持其他类型的`SigHash`标志。 它们用于合同。 此方法还需要一个钱包，其中包含输入连接到输出所使用的密钥。 如果您没有私钥，那么显然您无法声明该值。
 3. Find which blocks the transaction appears in using `getAppearsInHashes()`. Because the transaction only stores the hashes of the block headers, you may need to use a populated `BlockStore` to get the block data itself.
 4. Learn about the state of the transaction in the chain using `getConfidence`. This returns a `TransactionConfidence` object representing various bits of data about when and where the transaction was included into the block chain.
 
@@ -82,7 +82,7 @@ You can learn more about this topic in the article [WorkingWithContracts](https:
 
 *Learn how to use the wallet class and craft custom transactions with it.*
 
-## Introduction {#Introduction}
+## Introduction {#Introduction2}
 The Wallet class is one of the most important classes in bitcoinj. It stores keys and the transactions that assign value to/from those keys. It lets you create new transactions which spend the previously stored transactions outputs, and it notifies you when the contents of the wallet have changed.
 
 You’ll need to learn how to use the Wallet to build many kinds of apps.
@@ -427,7 +427,7 @@ Which API to use is up to you: they were contributed by two different contributo
 
 *This article applies to the code in git master only*
 
-## Introduction {#Introduction}
+## Introduction {#Introduction3}
 The bitcoinj networking APIs have a few options targeted at different use-cases - you can spin up individual Peers and manage them yourself or bring up a `PeerGroup` to let it manage them, you can use one-off sockets or socket managers, and you can use blocking sockets or NIO/non-blocking sockets. This page attempts to explain the tradeoffs and use-cases for each choice, as well as provide some basic examples to doing more advanced networking.
 
 The bitcoinj networking API is built up in a series of layers. On the bottom are simple wrapper classes that provide an API to open new connections using blocking sockets or java NIO (asynchronous select()-based sockets). On top of those sit various parsers that parse the network traffic into messages (ie into the Bitcoin messages). On top of those are `Peer` objects, which handle message handling (exchanging initial version handshake, downloading blocks, etc) for each individual remote peer and provide a simple event listener interface. Finally a `PeerGroup` can be layered on top to keep track of peers, ensuring there are always enough connections to the network and keeping track of network sync progress.
