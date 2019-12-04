@@ -34,67 +34,67 @@
 
 1. 使用 `getInputs()` , `getOutputs()` , `addInput()` 和 `addOutput()`访问输入和输出。注意，`addInput()` 有两种形式，其中一种采用 `TransactionInput` —这非常合乎逻辑。另一个是 `TransactionOutput` ，它将为您创建一个连接到输出的无符号输入。
 2. 用`signInputs()`签署交易输入。 当前，您必须始终将`SigHash.ALL`作为第一个参数传递。 将来会支持其他类型的`SigHash`标志。 它们用于合同。 此方法还需要一个钱包，其中包含输入连接到输出所使用的密钥。 如果您没有私钥，那么显然您无法声明该值。
-3. Find which blocks the transaction appears in using `getAppearsInHashes()`. Because the transaction only stores the hashes of the block headers, you may need to use a populated `BlockStore` to get the block data itself.
-4. Learn about the state of the transaction in the chain using `getConfidence`. This returns a `TransactionConfidence` object representing various bits of data about when and where the transaction was included into the block chain.
+3. 使用`getAppearsInHashes()`查找交易中出现的块。因为交易只存储块头的散列，所以您可能需要使用一个已填充的`BlockStore(块存储)`来获取块数据本身。
+4. 使用`getConfidence`了解链中的交易状态。它将返回一个`TransactionConfidence`对象，该对象表示关于交易何时何地被包含到块链中的各种数据位。
 
-## Confidence levels {#Confidence_levels}
-A transaction has an associated *confidence*. This is data you can use to calculate the probability of the transaction being reversed (double spent). This is always a risk in Bitcoin although at high network speeds, the probability becomes extremely low, certainly relative to traditional payment systems.
+## 置信级别 {#Confidence_levels}
+交易具有关联的 *confidence(信心)* 。 这些数据可用于计算交易被撤消（double spent双花）的可能性。 尽管在高网络速度下，这相对于传统支付系统而言，但这始终是比特币中的一种风险，尽管概率非常低。
 
-Confidence is modelled with the `TransactionConfidence` object. You can get one by calling `Transaction.getConfidence()`. Confidence data does not exist in Bitcoin serialization, but will survive Java and protobuf serialization.
+置信度是使用`TransactionConfidence`对象建模的。 您可以通过调用`Transaction.getConfidence()`获得一个。 置信度数据在比特币序列化中不存在，但可以在Java和protobuf序列化中保留下来。
 
-A confidence object has one of several states:
+置信对象具有以下几种状态之一：
 
-- If **BUILDING**, then the transaction is included in the best chain and your confidence in it is increasing.
-- If **PENDING**, then the transaction is unconfirmed and should be included shortly as long as it is being broadcast from time to time and is considered valid by the network. A pending transaction will be announced if the containing wallet has been attached to a live `PeerGroup` using `PeerGroup.addWallet()`. You can estimate how likely the transaction is to be included by measuring how many nodes announce it after sending it to one peer, using `TransactionConfidence.numBroadcastPeers()`. Or if you saw it from a trusted peer, you can assume it’s valid and will get mined sooner or later as well.
-- If **DEAD**, then it means the transaction won’t confirm unless there is another re-org, because some other transaction is spending one of its inputs. Such transactions should be alerted to the user so they can take action, eg, suspending shipment of goods if they are a merchant.
-- **UNKNOWN** is used if we have no information about the confidence of this transaction, because for example it has been deserialized from a Bitcoin structure but not broadcast or seen in the chain yet. UNKNOWN is the default state.
+- 如果是 **BUILDING**，则表示该交易已包含在最佳链中，您对此的信心正在增加。
+- 如果 **PENDING** ，则该交易未经确认，只要不时广播，并应被网络认为是有效的，则应将其包括在内。 如果包含的钱包已使用`PeerGroup.addWallet()`附加到实时的`PeerGroup`中，则将宣布待处理交易。 您可以使用`TransactionConfidence.numBroadcastPeers()`，通过测量在将交易发送给一个对等点后宣布该交易的节点数，来估计交易被包含的可能性。 或者，如果您从受信任的对等方看到它，则可以假定它是有效的，并且迟早也会被挖出。
+- 如果为 **DEAD**，则表示除非再次进行重组，否则该交易将无法确认，因为其他某项交易正在消耗其投入之一。 应该向用户提醒此类交易，以便他们可以采取行动，例如，如果他们是商人，则中止货物的运输。
+- 如果我们没有有关此交易的置信度的信息，则使用 **UNKNOWN** ，因为例如，它已从比特币结构中反序列化，但尚未在链中广播或看到。 UNKNOWN是默认状态。
 
-The confidence type, available via `TransactionConfidence.getConfidenceType()`, is a general statement of the transactions state. You can get a more precise view using getters on the object. For example, in the `BUILDING` state, `getDepthInBlocks()` should tell you how deeply buried the transaction is, in terms of blocks. The deeper it is buried in the chain, the less chance you have of the transaction being reversed.
+可通过`TransactionConfidence.getConfidenceType()`获得的置信度类型是交易状态的一般说明。 您可以在对象上使用`getters`获得更精确的视图。 例如，在`BUILDING`状态下，`getDepthInBlocks()`应该以块为单位告诉您交易的深度。 它被埋在链中的深度越深，交易被撤销的机会就越少。
 
-Depth in blocks is easy to understand and roughly corresponds to how long the transaction has been confirmed for (1 block == 10 minutes on average). However, this is not a stable measure of how much effort it takes to reverse a transaction because the amount of *work done* on a block varies over time, depending on how much mining is happening, which itself depends on the exchange rate (vs the dollar/euro/etc).
+区块深度很容易理解，大致对应于确认交易的时间（平均1区块== 10分钟）。 但是，这并不是衡量撤消交易需要花费多少精力的稳定方法，因为在一个区块上完成的工作量会随时间而变化，这取决于正在进行的挖矿数量，而挖矿本身取决于汇率（vs 美元/欧元/等）。
 
-### Understanding difficulty and confidence {#Understanding_difficulty_and_confidence}
-The most common reason you are interested in confidence is you wish to measure the risk of losing money that was sent to you, for example, to delay dispatching of goods or provision of services. The Bitcoin community uses a rule of thumb of zero confirmations for things that aren’t of much value like MP3s or ebooks, one or two blocks for things (10-20 minutes) for things that stand a risk of a double spend attack, or 6 blocks (an hour) for where rock solid certainty is required, like with currency exchanges.
+### 理解困难与信心 {#Understanding_difficulty_and_confidence}
+对`confidence信心`感兴趣的最常见原因是，您希望度量损失发送给您的钱的风险，例如延迟发送货物或提供服务。比特币社区使用零确认的经验法则来处理诸如MP3或电子书之类价值不高的事物，对于可能遭受双重消费攻击的事物使用一两个块（10-20分钟），或者 6个块（一小时），用于需要坚如磐石的确定性环境，例如货币兑换。
 
-In practice, reports of merchants suffering double-spend fraud are rare so this discussion is somewhat theoretical.
+在实践中，关于商家遭受双重消费欺诈的报道很少，因此这种讨论多少有些理论性。
 
-You’ll notice that the rules of thumb quoted above are expressed as blocks, not work done. So if the exchange rate and thus mining falls, 2 blocks provides less assurance than before, meaning you may wish to wait longer. Conversely if the exchange rate rises, mining activity will increase, meaning you can wait less time before a transaction is valid, resulting in happier customers. This is why we also provide a way to measure confidence as work done.
+您会注意到上面引用的经验法则是用块表示的，而不是完成的工作。因此，如果汇率下跌，从而导致采矿减少，2个块提供的保障比以前少，这意味着你可能希望等待更长的时间。相反，如果汇率上升，采矿活动将增加，这意味着你可以等待更少的时间，直到交易有效，从而使客户更快乐。这就是为什么我们还提供了一种方法来衡量信心。
 
-## How transactions can be used {#How_transactions_can_be_used}
-The most common and obvious way to use transactions is to:
+## 如何使用交易 {#How_transactions_can_be_used}
+最常见和最明显的交易方式是:
 
-1. Download them into your wallet from the block chain or network broadcasts
-2. Create spends and then broadcast them
+1. 将它们从区块链或网络广播下载到您的钱包中
+2. 创建支出，然后广播
 
-However there are many other possibilities.
+但是，还有许多其他可能性。
 
-### Direct transfer {#Direct_transfer}
-It’s possible to send someone money by directly giving them a transaction, which they can then broadcast at their leisure, or further modify. These use cases aren’t well supported today, but in future may become a common way to use Bitcoin.
+### 直接转账 {#Direct_transfer}
+可以通过直接给某人一笔交易来给某人汇款，然后他们可以在空闲时广播这笔交易，或者进一步修改这笔交易。这些用例目前还没有得到很好的支持，但将来可能会成为使用比特币的一种常见方式。
 
-### Participation in contracts {#Participation_in_contracts}
-[Contracts](https://en.bitcoin.it/wiki/Contracts) allow for a variety of low trust trades to take place, mediated by the Bitcoin network. By carefully constructing transactions with particular scripts, signatures and structures you can have low-trust dispute mediation, coins locked to arbitrary conditions (eg, futures contracts), assurance contracts, [smart property](https://en.bitcoin.it/wiki/Smart_Property) and many other possibilities.
+### 参与合约 {#Participation_in_contracts}
+[Contracts(合约)](https://en.bitcoin.it/wiki/Contracts)允许在比特币网络的介导下进行各种低信任度交易。 通过精心构建具有特定脚本，签名和结构的交易，您可以进行低信任度的争议调解，锁定在任意条件下的硬币（例如，期货合约），保证合约，[智能财产](https://en.bitcoin.it/wiki/Smart_Property)和许多其他可能性。
 
-You can learn more about this topic in the article [WorkingWithContracts](https://bitcoinj.github.io/working-with-contracts).
+您可以在文章[WorkingWithContracts](https://bitcoinj.github.io/working-with-contracts)中了解有关此主题的更多信息。
 
 
 
-# Working with the wallet
+# 使用钱包 {#Working_with_the_wallet}
 
-*Learn how to use the wallet class and craft custom transactions with it.*
+*了解如何使用wallet类并使用它处理定制交易。*
 
-## Introduction {#Introduction2}
-The Wallet class is one of the most important classes in bitcoinj. It stores keys and the transactions that assign value to/from those keys. It lets you create new transactions which spend the previously stored transactions outputs, and it notifies you when the contents of the wallet have changed.
+## 介绍 {#Introduction2}
+Wallet类是bitcoinj中最重要的类之一。 它存储密钥和为这些密钥分配值或从中分配值的交易。 它允许您创建新的交易，使用之前存储的交易输出，并在钱包内容更改时通知您。
 
-You’ll need to learn how to use the Wallet to build many kinds of apps.
+你需要学习如何使用Wallet来创建多种应用程序。
 
-This article assumes you’ve read Satoshi’s white paper and the [WorkingWithTransactions](https://bitcoinj.github.io/working-with-transactions) article.
+本文假定您已阅读Satoshi的白皮书和[WorkingWithTransactions](https://bitcoinj.github.io/working-with-transactions)文章。
 
-## Setup {#Setup}
-For optimal operation the wallet needs to be connected to a `BlockChain` and a `Peer` or `PeerGroup`. The block chain can be passed a Wallet in its constructor. It will send the wallet blocks as they are received so the wallet can find and extract *relevant transactions*, that is, transactions which send or receive coins to keys stored within it. The Peer/Group will send the wallet transactions which are broadcast across the network before they appear in a block.
+## 设置 {#Setup}
+为了实现最佳操作，钱包需要连接到`BlockChain区块链`和`Peer对等`或`PeerGroup`。 可以在其构造函数中将钱包传递给区块链。 它将在收到钱包块时发送它们，以便钱包可以查找并提取 *相关交易*，即将硬币发送或接收到其中存储的密钥的交易。 `Peer/Group`将发送钱包交易，这些交易在整个网络中广播，然后再出现在一个区块中。
 
-A Wallet starts out its life with no transactions in it, and thus a balance of zero, regardless of what the block chain contains. To use it you need to download the block chain, which will load the wallet up with transactions that can be analyzed and spent.
+无论区块链包含什么内容，钱包在开始使用时没有任何交易，因此余额为零。要使用它，你需要下载区块链，这将加载钱包的交易，可以分析和消费。
 
-```
+```java
 Wallet wallet = new Wallet(params);
 BlockChain chain = new BlockChain(params, wallet, ...);
 PeerGroup peerGroup = new PeerGroup(params, chain);
@@ -102,10 +102,10 @@ peerGroup.addWallet(wallet);
 peerGroup.startAndWait();
 ```
 
-## Getting addresses {#Getting_addresses}
-Of course, the snippet of code is fairly useless because there’s no way to get money into it. You can obtain keys and addresses from the wallet with the following API calls:
+## 获取地址 {#Getting_addresses}
+当然，这段代码是毫无用处的，因为没有办法把钱弄进去。您可以通过以下API调用从钱包中获取密钥和地址:
 
-```
+```java
 Address a = wallet.currentReceiveAddress();
 ECKey b = wallet.currentReceiveKey();
 Address c = wallet.freshReceiveAddress();
@@ -114,24 +114,24 @@ assert b.toAddress(wallet.getParams()).equals(a);
 assert !c.equals(a);
 ```
 
-These can then be handed out to receive payments on. The Wallet has a notion of a “current” address. This is intended for GUI wallets that wish to display an address at all times. Once the current address is seen being used, it changes to a new one. The freshReceiveKey/Address methods on the other hand always return a newly derived address.
+然后可以将其分发以接收付款。 电子钱包具有“当前”地址的概念。 这适用于希望始终显示地址的GUI钱包。 一旦看到当前地址正在使用，它将更改为新地址。 另一方面，`freshReceiveKey/Address`方法始终返回新派生的地址。
 
-## Seeds and mnemonic codes {#Seeds_and_mnemonic_codes}
-The keys and addresses returned by these methods are derived deterministically from a seed, using the algorithms laid out in BIP 32 and BIP 39. The life of a key looks like this:
+## 种子和助记码 {#Seeds_and_mnemonic_codes}
+这些方法返回的密钥和地址使用`BIP 32` 和 `BIP 39` 中列出的算法从种子中确定性地得出。密钥的寿命如下所示：
 
-1. A new Wallet object selects 128 bits of random entropy using `SecureRandom`.
-2. This randomness is transformed into a “mnemonic code”; a set of 12 words using a dictionary pre-defined by the BIP 39 standard.
-3. The string form of the 12 words is used as input to a key derivation algorithm (PBKDF2) and iterated numerous times to obtain the “seed”. Note that the seed is *not* simply the original random entropy represented using words as you might expect, rather, the seed is a derivative of the UTF-8 byte sequence of the words themselves.
-4. The newly calculated seed is then split into a master private key and a “chain code”. Together, these allow for iteration of a key tree using the algorithms specified in BIP 32. This algorithm exploits properties of elliptic curve mathematics to allow the public keys in a sequence to be iterated without having access to the equivalent private keys, which is very useful for vending addresses without needing the wallet to be decrypted if a password has been supplied. bitcoinj uses the default recommended tree structure from BIP 32.
-5. The wallet pre-calculates a set of *lookahead keys*. These are keys that were not issued by the Wallet yet via the current/freshReceiveKey APIs, but will be in future. Precalculation achieves several goals. One, it makes these APIs fast, which is useful for GUI apps that don’t want to wait for potentially slow EC math to be done. Two, it allows the wallet to notice transactions being made to/from keys that were not issued yet - this can happen if the wallet seed has been cloned to multiple devices, and if the block chain is being replayed.
+1. 一个新的Wallet对象使用`SecureRandom`选择128位随机熵。
+2. 这种随机性被转化为“mnemonic code 助记码”;使用`BIP 39`标准预先定义的字典的一组12个单词。
+3. 12个单词的字符串形式用作密钥派生算法（PBKDF2）的输入，并进行多次迭代以获得“seed 种子”。 请注意，种子并非只是您所期望的使用单词表示的原始随机熵，而是种子本身的UTF-8字节序列的派生词。
+4. 然后将新计算出的种子分为主私钥和“chain code 链码”。 在一起，它们允许使用`BIP 32`中指定的算法来迭代密钥树。此算法利用椭圆曲线数学的属性，允许迭代序列中的公钥而无需访问等效的私钥，这对于在提供密码时不需要对钱包解密的自动售货地址非常有用。 bitcoinj使用`BIP 32`中推荐的默认推荐树结构。
+5. 钱包会预先计算一组 *lookahead keys超前密钥* 。 这些密钥尚未由电子钱包通过`current/freshReceiveKey` API发布，但将会在将来发布。 预计算可以实现几个目标。 第一，它使这些API变得快速，这对于不想等待可能慢的EC数学完成的GUI应用程序很有用。 第二，它允许钱包注意到与尚未发行的密钥进行的交易/来自尚未发行的密钥的交易-如果已将钱包种子克隆到多个设备，并且正在重播区块链，则可能发生这种情况。
 
-The seed and keys that were (pre) calculated are saved to disk in order to avoid slow rederivation loops when the wallet is loaded.
+（预先）计算出的种子和密钥将保存到磁盘中，以避免在加载钱包时出现缓慢的重新分配循环。
 
-The “wallet words” are intended to be easier to work with and write down than a raw private key: users can easily work with them using a pen and paper with less chance of accidentally writing things down wrong. So you’re encouraged to expose the words to users as a backup mechanism (make sure they write down the date too, to speed up restore).
+与原始私钥相比，“wallet words 钱包里的单词”旨在更易于使用和写下来：用户可以使用笔和纸轻松地与他们一起使用，而很少有意外将事情记错的可能性。 因此，建议您将这些字词作为备份机制提供给用户（请确保他们也记下日期，以加快还原速度）。
 
-You can work with seeds like this:
+您可以像这样处理种子：
 
-```
+```java
 DeterministicSeed seed = wallet.getKeyChainSeed();
 println("Seed words are: " + Joiner.on(" ").join(seed.getMnemonicCode()));
 println("Seed birthday is: " + seed.getCreationTimeSeconds());
@@ -143,7 +143,7 @@ Wallet restoredWallet = Wallet.fromSeed(params, seed);
 // now sync the restored wallet as described below.
 ```
 
-The lookahead zone plays an important role when keeping wallets synchronised together. The default zone is 100 keys in size. This means that if wallet A is cloned to wallet B, and wallet A issues 50 keys of which only the last one is actually used to receive payment, wallet B will still notice that payment and move its lookahead zone such that B is tracking 150 keys in total. If wallet A handed out 120 keys and only the 110th received payment, wallet B would not notice anything had happened. For this reason when trying to keep wallets in sync it’s important that you have some idea of how many outstanding addresses there may be awaiting payment at any given time. The default of 100 is selected to be appropriate for consumer wallets, but in a merchant scenario you may need a larger zone.
+在使钱包保持同步时，超前区域发挥着重要作用。 默认区域为100个键。 这意味着，如果将钱包A克隆到钱包B，并且钱包A发行了50个密钥，而实际上只有最后一个密钥用于接收付款，则钱包B仍会注意到该付款并移动其超前区域，这样B总共跟踪了150个密钥。如果A钱包分发了120个钥匙，而只有110个收到了付款，B钱包就不会注意到发生了什么。因此，在同步钱包的时候，你需要知道在任何时候有多少未完成的地址在等待付款。默认值100被选择为适用于消费者钱包，但是在商家场景中，您可能需要更大的区域。
 
 ## Replaying the chain {#Replaying_the_chain}
 If you import non-fresh keys to a wallet that already has transactions in it, to get the transactions for the added keys you must remove transactions by resetting the wallet (using the `reset` method) and re-download the chain. Currently, there is no way to replay the chain into a wallet that already has transactions in it and attempting to do so may corrupt the wallet. This is likely to change in future. Alternatively, you could download the raw transaction data from some other source, like a block explorer, and then insert the transactions directly into the wallet. However this is currently unsupported and untested. For most users, importing existing keys is a bad idea and reflects some deeper missing feature. Talk to us if you feel a burning need to import keys into wallets regularly.
